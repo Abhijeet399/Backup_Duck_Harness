@@ -48,7 +48,7 @@
         "port": 1234,
         "tensor_parallel_size": 1,
         "dtype": "auto",
-        "gpu_memory_utilization": 0.8,
+        "gpu_memory_utilization": 0.88,
         "trust_remote_code": true,
         "generation_config": "vllm",
         "language_model_only": false,
@@ -59,7 +59,7 @@
             "preserve_thinking": true
         },
         "enforce_eager": true,
-        "max_model_len": 16384
+        "max_model_len": 32768
     },
     "analyzer": {
         "app_name": "ARC3 Agent Harness",
