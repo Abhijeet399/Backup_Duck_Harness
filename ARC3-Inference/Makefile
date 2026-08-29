@@ -109,6 +109,7 @@ SERVER_TENSOR_PARALLEL_SIZE ?= $(shell $(CONFIG_VALUE) server.tensor_parallel_si
 SERVER_MAX_MODEL_LEN ?= $(shell $(CONFIG_VALUE) server.max_model_len $(SERVER_SHARED_CONTEXT_WINDOW))
 SERVER_DTYPE ?= $(shell $(CONFIG_VALUE) server.dtype)
 SERVER_GPU_MEMORY_UTILIZATION ?= $(shell $(CONFIG_VALUE) server.gpu_memory_utilization)
+SERVER_ENFORCE_EAGER ?= $(shell $(CONFIG_VALUE) server.enforce_eager true)
 SERVER_TRUST_REMOTE_CODE ?= $(shell $(CONFIG_VALUE) server.trust_remote_code false)
 SERVER_GENERATION_CONFIG ?= $(shell $(CONFIG_VALUE) server.generation_config vllm)
 SERVER_LANGUAGE_MODEL_ONLY ?= $(shell $(CONFIG_VALUE) server.language_model_only false)
@@ -304,6 +305,7 @@ server:
 				--max-model-len "$(SERVER_MAX_MODEL_LEN)" \
 				$(if $(SERVER_DTYPE),--dtype "$(SERVER_DTYPE)") \
 				$(if $(SERVER_GPU_MEMORY_UTILIZATION),--gpu-memory-utilization "$(SERVER_GPU_MEMORY_UTILIZATION)") \
+				$(if $(filter true TRUE 1 yes YES on ON,$(SERVER_ENFORCE_EAGER)),--enforce-eager) \
 				$(if $(filter true TRUE 1 yes YES on ON,$(SERVER_TRUST_REMOTE_CODE)),--trust-remote-code) \
 				$(if $(SERVER_GENERATION_CONFIG),--generation-config "$(SERVER_GENERATION_CONFIG)") \
 				$(if $(filter true,$(SERVER_LANGUAGE_MODEL_ONLY)),--language-model-only) \
