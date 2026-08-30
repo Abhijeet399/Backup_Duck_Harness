@@ -110,6 +110,7 @@ SERVER_MAX_MODEL_LEN ?= $(shell $(CONFIG_VALUE) server.max_model_len $(SERVER_SH
 SERVER_DTYPE ?= $(shell $(CONFIG_VALUE) server.dtype)
 SERVER_GPU_MEMORY_UTILIZATION ?= $(shell $(CONFIG_VALUE) server.gpu_memory_utilization)
 SERVER_ENFORCE_EAGER ?= $(shell $(CONFIG_VALUE) server.enforce_eager true)
+SERVER_DISABLE_CUSTOM_ALL_REDUCE ?= $(shell $(CONFIG_VALUE) server.disable_custom_all_reduce true)
 SERVER_TRUST_REMOTE_CODE ?= $(shell $(CONFIG_VALUE) server.trust_remote_code false)
 SERVER_GENERATION_CONFIG ?= $(shell $(CONFIG_VALUE) server.generation_config vllm)
 SERVER_LANGUAGE_MODEL_ONLY ?= $(shell $(CONFIG_VALUE) server.language_model_only false)
@@ -302,6 +303,7 @@ server:
 				--port "$(SERVER_PORT)" \
 				--served-model-name "$(SERVER_SERVED_MODEL_NAME)" \
 				--tensor-parallel-size "$(SERVER_TENSOR_PARALLEL_SIZE)" \
+				$(if $(filter true TRUE 1 yes YES on ON,$(SERVER_DISABLE_CUSTOM_ALL_REDUCE)),--disable-custom-all-reduce) \
 				--max-model-len "$(SERVER_MAX_MODEL_LEN)" \
 				$(if $(SERVER_DTYPE),--dtype "$(SERVER_DTYPE)") \
 				$(if $(SERVER_GPU_MEMORY_UTILIZATION),--gpu-memory-utilization "$(SERVER_GPU_MEMORY_UTILIZATION)") \
