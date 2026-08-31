@@ -955,6 +955,13 @@ class ToolAgent:
         self._last_step_summary: dict[str, Any] | None = None
         self._last_action_result: dict[str, Any] | None = None
         self._summarized_knowledge = _empty_world_model()
+        # Stagnation supervisor state (Stage 0): rolling record of recent progress.
+        self._level_history: list[int] = []
+        self._no_change_streak: int = 0
+        self._steps_since_level_progress: int = 0
+        self._stagnation_mild_threshold = _get_env_int("STAGNATION_MILD_STEPS", 6)
+        self._stagnation_severe_threshold = _get_env_int("STAGNATION_SEVERE_STEPS", 15)
+        self._stagnation_enabled = _get_env_bool("STAGNATION_ENABLED", True)
 
     def _headers(self) -> dict[str, str]:
         api_key = (
@@ -982,6 +989,9 @@ class ToolAgent:
             self._last_step_summary = None
             self._last_action_result = None
             self._summarized_knowledge = _empty_world_model()
+            self._level_history = []
+            self._no_change_streak = 0
+            self._steps_since_level_progress = 0
 
     @property
     def total_tokens(self) -> int:
@@ -1066,6 +1076,52 @@ class ToolAgent:
             "board_changed": any(bool(item.get("board_changed")) for item in executed_results),
             "stop_reason": last.get("stop_reason"),
         }
+
+    def _update_stagnation_tracking(self, summary: dict[str, Any] | None) -> None:
+        """Roll the progress record forward one step (Stage 0 stagnation supervisor)."""
+        if not summary:
+            return
+        level = summary.get("level")
+        try:
+            level_int = int(level) if level is not None else (self._level_history[-1] if self._level_history else 0)
+        except (TypeError, ValueError):
+            level_int = self._level_history[-1] if self._level_history else 0
+        self._level_history.append(level_int)
+        if len(self._level_history) > 40:
+            self._level_history = self._level_history[-40:]
+
+        if summary.get("board_changed"):
+            self._no_change_streak = 0
+        else:
+            self._no_change_streak += 1
+
+        if summary.get("level_transition"):
+            self._steps_since_level_progress = 0
+        else:
+            self._steps_since_level_progress += 1
+
+    def _stagnation_note(self) -> str:
+        """Return an escalating nudge string, or '' if not stagnating."""
+        if not getattr(self, "_stagnation_enabled", True):
+            return ""
+        severe = self._stagnation_severe_threshold
+        mild = self._stagnation_mild_threshold
+        if self._steps_since_level_progress >= severe or self._no_change_streak >= severe:
+            return (
+                f"STAGNATION ALERT: {self._steps_since_level_progress} actions since your last "
+                f"level progress and {self._no_change_streak} recent actions with no board change. "
+                "Your current world model is very likely WRONG. Stop repeating variations of the same "
+                "approach. Re-read the current frame from scratch, form a NEW hypothesis about the goal "
+                "and mechanics, and test the single most informative action rather than continuing the "
+                "current plan."
+            )
+        if self._no_change_streak >= mild:
+            return (
+                f"NUDGE: {self._no_change_streak} recent actions produced no board change. "
+                "Question your current hypothesis before continuing; try a distinctly different action "
+                "to gather new information rather than repeating the same idea."
+            )
+        return ""
 
     def _describe_last_outcome(self, summary: dict[str, Any] | None) -> str:
         if not summary:
@@ -1206,6 +1262,9 @@ class ToolAgent:
                 lines.append("You have progressed to a new level!")
             else:
                 lines.append("You are still on the same level.")
+                _stag = self._stagnation_note()
+                if _stag:
+                    lines.append(_stag)
             if previous_step_summary.get("game_over"):
                 lines.append("The game is over.")
         elif (current_frame is not None and current_frame.step > 0) or action_num > 0:
@@ -1581,6 +1640,7 @@ class ToolAgent:
         step_executed = any(bool(item.get("executed")) for item in action_results)
         if step_executed:
             self._last_step_summary = self._summarize_step_sequence(action_results)
+            self._update_stagnation_tracking(self._last_step_summary)
             self._update_summarized_knowledge_from_step_summary()
         return _ToolDispatchResult(
             self._render_tool_payload(payload, truncate_fields=("stdout", "error", "result")),
