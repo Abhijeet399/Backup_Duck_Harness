@@ -80,8 +80,8 @@ def _to_action_input(a: Action) -> "arcengine.ActionInput":
     gid = arcengine.GameAction.from_name(a.name)          # a.name is already engine-form
     data: dict = {}
     if gid == arcengine.GameAction.ACTION6 and a.x is not None:
-        # solver.py clamps row/col to 0..63; not needed for arrow-only games (ls20).
-        data = {"row": max(0, min(63, int(a.y))), "col": max(0, min(63, int(a.x)))}
+        # engine reads action.data["x"]/["y"] (taaf/game.py); clamp to 0..63.
+        data = {"x": max(0, min(63, int(a.x))), "y": max(0, min(63, int(a.y)))}
     return arcengine.ActionInput(id=gid, data=data)
 
 

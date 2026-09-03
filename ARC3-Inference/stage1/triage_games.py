@@ -32,11 +32,16 @@ def fingerprint(game: str, envs: str) -> dict:
     g = env.reset()
     acts = [a.name for a in env.available_actions(g)]
     n_obj, n_col = len(extract_objects(g)), int(np.unique(g).size)
-    movers, win = [], False
+    movers, win, mouse = [], False, 0
     cur = g
     for a in acts:
         before = cur
-        cur, term = env.step(Action(a))
+        try:
+            cur, term = env.step(Action(a))
+        except Exception:
+            mouse += 1          # action needs coords (ACTION6 mouse) — skip for movement triage
+            cur = before
+            continue
         d = object_diff(before, cur)
         movers.append(sum(1 for o, _ in d.moved if o.size <= 60))
         if term == "LEVEL_COMPLETED":
@@ -44,7 +49,7 @@ def fingerprint(game: str, envs: str) -> dict:
     typical = Counter(movers).most_common(1)[0][0] if movers else 0
     verdict = ({0: "static?", 1: "CLEAN", 2: "compound"}.get(typical, "complex"))
     return {"game": game, "actions": len(acts), "colors": n_col, "objects": n_obj,
-            "movers": movers, "win": win, "shape": tuple(g.shape),
+            "movers": movers, "win": win, "shape": tuple(g.shape), "mouse": mouse,
             "typical": typical, "verdict": verdict}
 
 
@@ -63,8 +68,9 @@ def main():
             print(f"{game:6}  -- {fp['error']}")
             continue
         rows.append(fp)
+        mk = f"  mouse x{fp['mouse']}" if fp.get('mouse') else ""
         print(f"{fp['game']:6} {fp['actions']:>3} {fp['colors']:>3} {fp['objects']:>4}  "
-              f"{fp['verdict']:9} {'yes' if fp['win'] else '  .':>3}  {fp['movers']}")
+              f"{fp['verdict']:9} {'yes' if fp['win'] else '  .':>3}  {fp['movers']}{mk}")
 
     # shortlist: CLEAN first, then fewest objects+colors (simplest boards)
     clean = [r for r in rows if r["verdict"] == "CLEAN"]
