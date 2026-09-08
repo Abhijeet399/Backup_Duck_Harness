@@ -48,6 +48,8 @@ def main():
     ap.add_argument("--max-calls", type=int, default=2)
     ap.add_argument("--max-actions", type=int, default=25)
     ap.add_argument("--reserve", type=float, default=30.0)
+    ap.add_argument("--noop", default="ACTION5",
+                    help="no-op action used to derive the HUD/timer mask (empty to skip)")
     args = ap.parse_args()
 
     env = ArcEnv(args.game, args.envs)
@@ -66,8 +68,36 @@ def main():
         from qwen_inducer import QwenInducer, default_probes  # Step 6
         inducer = QwenInducer(endpoint=args.endpoint)
         probes = default_probes(env)
+        # Derive a HUD/timer mask from the no-op action: cells that change under a
+        # no-op are display (timer bars), not game state. Mask their whole row(s)
+        # so the world model is judged on gameplay, not decoration.
+        if args.noop:
+            import numpy as np
+            from stage1_core import Action as _A
+            try:
+                gm = env.reset()
+                mask = np.zeros_like(gm, dtype=bool)
+                for _ in range(4):
+                    g0 = gm
+                    gm, term = env.step(_A(args.noop))
+                    mask |= (g0 != gm)
+                    if term == "GAME_OVER":
+                        break
+                rows = sorted(set(int(r) for r, c in np.argwhere(mask)))
+                for r in rows:
+                    mask[r, :] = True
+                if mask.any():
+                    inducer.ignore_mask = mask
+                    print(f"[run] HUD mask derived from {args.noop}: "
+                          f"{int(mask.sum())} cells, rows={rows}")
+            except Exception as ex:
+                print(f"[run] HUD mask derivation skipped: {ex}")
+            finally:
+                env.reset()   # restore clean start state for the real run
 
-    action_gen = lambda g: env.available_actions(g)
+    # arrow games: use discrete moves, drop bare ACTION6 (needs coords / handled separately)
+    from stage1_core import Action
+    action_gen = lambda g: [a for a in env.available_actions(g) if a.name != "ACTION6"]
     budget = Budget(
         wall_clock_s=args.wall,
         max_llm_calls=args.max_calls,

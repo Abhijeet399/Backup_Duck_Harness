@@ -64,7 +64,7 @@ def _render_transition(t: Transition, background: int) -> str:
     return f"action={t.action!r}{term}: {d.summary()}"
 
 
-def _render_history(history: list[Transition], background: int, cap: int = 40) -> str:
+def _render_history(history: list[Transition], background: int, cap: int = 20) -> str:
     lines = [_render_transition(t, background) for t in history[-cap:]]
     return "\n".join(lines)
 
@@ -100,10 +100,18 @@ def _extract_json(text: str) -> Optional[dict]:
 
 
 class QwenInducer:
-    def __init__(self, base_url: str, model: str, api_key: str,
-                 max_tokens: int = 8192, timeout: float = 600.0,
-                 enable_thinking: bool = True, temperature: float = 0.3,
+    def __init__(self, base_url: str = None, model: str = "vrfai/Qwen3.6-27B-FP8",
+                 api_key: str = None, endpoint: str = None,
+                 key_file: str = ".cache/arc3_runtime/server-api-key",
+                 max_tokens: int = 4096, timeout: float = 600.0,
+                 enable_thinking: bool = False, temperature: float = 0.3,
                  verbose: bool = True):
+        base_url = endpoint or base_url or "http://127.0.0.1:1234/v1"
+        if api_key is None:
+            try:
+                api_key = open(key_file).read().strip()
+            except Exception:
+                api_key = ""
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
@@ -112,6 +120,7 @@ class QwenInducer:
         self.enable_thinking = enable_thinking
         self.temperature = temperature
         self.verbose = verbose
+        self.ignore_mask = None   # HUD mask stamped onto every model we return
 
     # -- the Inducer protocol -------------------------------------------------
     def __call__(self, history: list[Transition],
@@ -135,6 +144,8 @@ class QwenInducer:
             if self.verbose:
                 print(f"[inducer] spec did not compile: {ex}")
             return []
+        if self.ignore_mask is not None:
+            model.ignore_mask = self.ignore_mask
         if self.verbose:
             print(f"[inducer] compiled a model with {len(spec.get('rules', []))} rules")
         return [model]
@@ -170,13 +181,28 @@ class QwenInducer:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        req = urllib.request.Request(self.base_url + "/chat/completions",
-                                     data=body, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                msg = json.loads(r.read())["choices"][0]["message"]
-        except Exception as ex:
-            if self.verbose:
-                print(f"[inducer] server call failed: {ex}")
-            return ""
-        return msg.get("content") or msg.get("reasoning_content") or msg.get("reasoning") or ""
+        import time as _t
+        last_ex = None
+        for attempt in range(2):
+            req = urllib.request.Request(self.base_url + "/chat/completions",
+                                         data=body, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    msg = json.loads(r.read())["choices"][0]["message"]
+                return msg.get("content") or msg.get("reasoning_content") or msg.get("reasoning") or ""
+            except Exception as ex:
+                last_ex = ex
+                if self.verbose:
+                    print(f"[inducer] server call failed (attempt {attempt+1}): {ex}")
+                _t.sleep(2.0)
+        return ""
+
+
+def default_probes(env):
+    """Cold-start probe actions. For arrow games these are the simple moves; we
+    include all discrete actions the env exposes (dropping mouse ACTION6, which
+    needs coordinates and is handled by a click-generator when relevant)."""
+    from stage1_core import Action
+    g = env.reset()
+    names = [a.name for a in env.available_actions(g) if a.name != "ACTION6"]
+    return [Action(n) for n in names]
