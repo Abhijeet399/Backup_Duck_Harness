@@ -164,7 +164,9 @@ def play_game(
         candidates = rank_candidates(candidates) if candidates else []
         trusted = next((c for c in candidates if c.result.exact_match_rate == 1.0), None)
 
+        best = max((c.result.exact_match_rate for c in candidates), default=0.0) if candidates else 0.0
         if trusted is None:
+            print(f"[loop] no trusted model (best backtest={best:.2f}); gathering + re-inducing")
             # No model explains everything seen. Don't plan on a broken model.
             # Spend ONE real action to gather the most useful next transition:
             # the action that most splits surviving candidates, else keep covering.
@@ -183,6 +185,7 @@ def play_game(
         plan = bfs_plan(trusted.model, grid, action_generator,
                         max_nodes=bfs_max_nodes, max_depth=bfs_max_depth)
         if plan is None:
+            print("[loop] trusted model but BFS found NO plan (goal likely wrong/unreachable)")
             # Model is faithful but can't reach the goal from here: goal_fn is likely
             # wrong, or a needed mechanic is unobserved. Gather one more transition,
             # then re-induce (which may revise goal_fn).
@@ -198,7 +201,11 @@ def play_game(
             continue
 
         # Commit-and-verify: execute the plan, checking each real frame vs prediction.
+        print(f"[loop] trusted model (rules={len(trusted.model.rules)}), "
+              f"bfs plan={len(plan)} actions; executing...")
         outcome = execute_and_verify(env, trusted.model, grid, plan)
+        print(f"[loop] execute -> status={outcome.status} steps={outcome.steps_taken} "
+              f"terminal={outcome.terminal}")
         budget.act(outcome.steps_taken)
         history += outcome.new_transitions
         if outcome.new_transitions:

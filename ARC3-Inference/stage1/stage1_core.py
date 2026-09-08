@@ -275,6 +275,7 @@ def bfs_plan(
     action_generator: Callable[[Grid], list[Action]],
     max_nodes: int = 200_000,
     max_depth: int = 80,
+    max_seconds: float = 8.0,
 ) -> Optional[list[Action]]:
     """Return a shortest action sequence reaching goal inside the model, or None.
 
@@ -285,10 +286,14 @@ def bfs_plan(
     """
     if model.is_goal(start):
         return []
+    import time as _time
+    _deadline = _time.monotonic() + max_seconds
     seen = {grid_key(start)}
     frontier: deque[tuple[Grid, list[Action]]] = deque([(start, [])])
     nodes = 0
     while frontier and nodes < max_nodes:
+        if _time.monotonic() > _deadline:
+            return None
         grid, path = frontier.popleft()
         if len(path) >= max_depth:
             continue
