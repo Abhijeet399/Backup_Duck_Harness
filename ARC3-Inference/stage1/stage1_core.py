@@ -200,11 +200,15 @@ class WorldModel:
         goal_fn: Callable[[Grid], bool],
         terminal_fn: Callable[[Grid], Optional[str]] = lambda g: None,
         background: int = 0,
+        ignore_mask=None,
     ):
         self.rules = rules
         self.goal_fn = goal_fn
         self.terminal_fn = terminal_fn
         self.background = background
+        # HUD/timer cells to EXCLUDE from exact-match backtest (bool array or None).
+        # The world model predicts game state, not display; masked cells are decoration.
+        self.ignore_mask = ignore_mask
 
     def step(self, grid: Grid, a: Action) -> Optional[Grid]:
         for rule in self.rules:
@@ -245,7 +249,13 @@ def backtest(model: WorldModel, history: list[Transition]) -> BacktestResult:
     div_diff = None
     for i, t in enumerate(history):
         pred = model.step(t.grid, t.action)
-        ok = pred is not None and pred.shape == t.next_grid.shape and np.array_equal(pred, t.next_grid)
+        if pred is None or pred.shape != t.next_grid.shape:
+            ok = False
+        elif getattr(model, "ignore_mask", None) is not None and model.ignore_mask.shape == t.next_grid.shape:
+            keep = ~model.ignore_mask
+            ok = bool(np.array_equal(pred[keep], t.next_grid[keep]))
+        else:
+            ok = bool(np.array_equal(pred, t.next_grid))
         if ok:
             correct += 1
         elif first_div is None:
