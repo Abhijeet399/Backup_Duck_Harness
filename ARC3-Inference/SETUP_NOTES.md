@@ -17,3 +17,16 @@
 - Caveat: needs generous token budget + thinking on; one-shot probe understates ability.
 - Verdict: green light to build Stage 1 (executable world-model) on Qwen; revisit stronger
   model (GPT-OSS-120B on 96GB card) only if the iterative harness plateaus.
+
+## Stage 1 progress (spine validated)
+- Spine (stage1_core + stage1_controller): observe -> backtest -> BFS -> commit-verify.
+  Validated end-to-end via hardened_smoke_test.py on a MULTI-OBJECT CLICK game
+  (coordinate actions + pruned action_generator + multi-object exact-match backtest).
+- Corrected triage (object_diff-based, all 25): ZERO clean single-arrow games.
+  19/25 are mouse (ACTION6 coordinate); 6 non-mouse all move 2+ objects/action.
+  => hand-modeling any real game is a research task; the inducer must handle
+     mouse-action-generation (4096-cell pruning) + multi-object from the start.
+- Feasibility (earlier): Qwen3.6-27B induces game mechanics from diffs (ft09),
+  thinking-on + big token budget, iterative loop preferred.
+- NOT BUILT / critical path: qwen_inducer.py — the LLM seam producing WorldModel
+  rules from observed transitions (backtest-gated, diff-based prompt, ~2 calls/game).
