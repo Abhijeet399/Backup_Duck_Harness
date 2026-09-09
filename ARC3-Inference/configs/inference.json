@@ -46,7 +46,7 @@
         "backend": "vllm",
         "host": "127.0.0.1",
         "port": 1234,
-        "tensor_parallel_size": 2,
+        "tensor_parallel_size": 1,
         "dtype": "auto",
         "gpu_memory_utilization": 0.9,
         "trust_remote_code": true,
@@ -58,7 +58,7 @@
         "default_chat_template_kwargs": {
             "preserve_thinking": true
         },
-        "enforce_eager": false,
+        "enforce_eager": true,
         "max_model_len": 32768
     },
     "analyzer": {
