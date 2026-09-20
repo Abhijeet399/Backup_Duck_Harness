@@ -106,3 +106,12 @@ Turning certified models into wins: **blocked on goal-discovery, a real research
 problem now precisely scoped.** This is a strong, defensible position — the hard
 infrastructure and the uncertain feasibility question are both settled; the
 remaining work is a well-defined (hard) inference problem.
+
+## BREAKTHROUGH: sp80 goal DECODED and SOLVED (via multi-win mining, Twin method)
+- Mined 15 recorded sp80 wins across 24 passes. Invariant: avatar (color 9) left-col == 24
+  in EVERY win, NEVER the distinguishing factor alone (505 non-wins also at col 24).
+- Winning ACTION is ALWAYS ACTION5 (which we'd wrongly treated as a no-op / HUD-mask action).
+- GOAL = reach avatar col 24, then press ACTION5 (submit/confirm). Verified LIVE: 3 moves + ACTION5 = LEVEL_COMPLETED.
+- Method (general): mine multiple wins -> feature common to all winning frames, absent from non-wins
+  -> check winning action -> goal_fn + confirm-action. Solves the single-win underdetermination
+  that blocked Stage 1. This is Twin's goal-discovery, validated on our hardest case.
