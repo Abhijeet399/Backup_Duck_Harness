@@ -133,3 +133,13 @@ remaining work is a well-defined (hard) inference problem.
 - Local Qwen3.6-27B, fully autonomous, no hand-coded goal. Solved in 3 moves + submit (high RHAE efficiency).
 - This is the complete executable-world-model + goal-discovery loop (Twin/EWM approach, Aug 2026 SOTA),
   running locally. The thing that blocked Stage 1 is fully closed on sp80.
+
+## Goal-discovery coverage (refinement loop + parse-hardening)
+- Counterexample-refinement (show LLM its false-positive frames -> tighten predicate) added.
+- Parse-hardening: retry until code is syntactically valid.
+- Coverage on submit-action games: sp80 YES(565/565), su15 YES(2488/2488) fully validated.
+  bp35/lp85/sb26: win_true==win_total (right on ALL wins), a few false-fires left -> converging,
+  need 1-2 more refinement steps. lp85 only 3 false-positives.
+- vc33/ft09/tn36: intermittent compile variance (27B code-gen). ar25: wrong-on-wins (movement goal, not submit).
+- Boundary: local 27B validates simple/positional goals; relational goals + code-gen variance are the
+  limit. Research says GPT-OSS-120B (fits 96GB) writes better predicates -> next experiment.

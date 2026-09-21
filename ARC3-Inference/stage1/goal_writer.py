@@ -108,9 +108,31 @@ function, no prose."""
 
 
 def _extract_code(text):
+    if not text:
+        return ""
+    # prefer a fenced python block; else take from the first def goal_reached
     m = re.search(r"```(?:python)?\s*(.*?)```", text, re.DOTALL)
-    code = m.group(1) if m else text
+    if m:
+        code = m.group(1)
+    else:
+        idx = text.find("def goal_reached")
+        code = text[idx:] if idx != -1 else text
+    # trim anything before the first import/def (stray prose/backticks)
+    lines = code.splitlines()
+    start = 0
+    for i, ln in enumerate(lines):
+        if ln.lstrip().startswith(("import ", "def goal_reached", "from ")):
+            start = i; break
+    code = "\n".join(lines[start:]).strip()
     return code
+
+
+def _parses(code):
+    import ast
+    try:
+        ast.parse(code); return True
+    except Exception:
+        return False
 
 
 def propose_goal_predicate(win_frames, nonwin_frames, inducer, cap=8):
@@ -119,8 +141,16 @@ def propose_goal_predicate(win_frames, nonwin_frames, inducer, cap=8):
         nonwin_block=_render(nonwin_frames, "NONWIN", cap),
     )
     # reuse the inducer's raw LLM call (thinking-off, fast — this is spec-like emission)
-    reply = inducer._call(prompt)  # noqa: SLF001 (intentional reuse of the server call)
-    return _extract_code(reply)
+    for _ in range(3):
+        reply = inducer._call(prompt)  # noqa: SLF001
+        code = _extract_code(reply)
+        if code and _parses(code) and "goal_reached" in code:
+            return code
+        # nudge for valid syntax on retry
+        prompt = prompt + ("\n\nIMPORTANT: your previous answer was not valid Python. "
+                           "Return ONLY a syntactically correct ```python code block "
+                           "defining def goal_reached(grid): using numpy as np. No prose.")
+    return code  # last attempt (may still be bad; validate_predicate will reject)
 
 
 # --------------------------------------------------------------------------- #
@@ -159,6 +189,36 @@ def validate_predicate(src, win_frames, nonwin_frames):
     return ok, (fn if ok else None), stats
 
 
+
+
+_REFINE = """Your goal_reached predicate was TOO PERMISSIVE. It correctly returned
+True on all WIN frames, but it ALSO returned True on these NON-WIN frames (where the
+level was NOT won). Make the predicate STRICTER so it is False on these, while
+staying True on all wins.
+
+Your previous predicate:
+```python
+{prev_src}
+```
+
+NON-WIN frames it wrongly accepted (make these return False):
+{fp_block}
+
+WIN frames (must still be True):
+{win_block}
+
+Return ONLY a ```python code block with the corrected `goal_reached(grid)`."""
+
+
+def _refine_goal_predicate(prev_src, win_frames, fp_frames, inducer, cap=6):
+    prompt = _REFINE.format(
+        prev_src=prev_src.strip(),
+        fp_block=_render(fp_frames, "WRONGLY_ACCEPTED", cap),
+        win_block=_render(win_frames, "WIN", cap),
+    )
+    return _extract_code(inducer._call(prompt))
+
+
 def discover_goal(game, submit_action, inducer, max_tries=3, cap=8, verbose=True):
     """Full loop: mine -> propose -> validate, retrying the LLM up to max_tries."""
     win, nonwin = mine_frames(game, submit_action)
@@ -167,8 +227,8 @@ def discover_goal(game, submit_action, inducer, max_tries=3, cap=8, verbose=True
     if not win:
         return None, {"error": "no wins mined"}
     last_stats = None
+    src = propose_goal_predicate(win, nonwin, inducer, cap=cap)
     for t in range(max_tries):
-        src = propose_goal_predicate(win, nonwin, inducer, cap=cap)
         ok, fn, stats = validate_predicate(src, win, nonwin)
         last_stats = stats
         if verbose:
@@ -176,4 +236,24 @@ def discover_goal(game, submit_action, inducer, max_tries=3, cap=8, verbose=True
         if ok:
             return {"goal_reached": fn, "src": src, "submit_action": submit_action,
                     "stats": stats}, stats
+        # If the predicate is right on wins but too permissive, REFINE using the
+        # false-positive frames (non-wins it wrongly accepted). Else re-propose fresh.
+        if stats.get("win_true") == stats.get("win_total") and stats.get("eval_errors", 1) == 0:
+            # collect the non-win frames the current predicate wrongly accepts
+            ns = {"np": np}
+            try:
+                exec(src, ns); cur = ns["goal_reached"]
+                fps = [f for f in nonwin if _safe_true(cur, f)][:6]
+            except Exception:
+                fps = []
+            if fps:
+                src = _refine_goal_predicate(src, win, fps, inducer, cap=cap)
+                continue
+        # fallback: fresh proposal
+        src = propose_goal_predicate(win, nonwin, inducer, cap=cap)
     return None, last_stats
+
+
+def _safe_true(fn, g):
+    try: return bool(fn(g)) is True
+    except Exception: return False
