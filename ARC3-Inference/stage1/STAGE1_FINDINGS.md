@@ -124,3 +124,12 @@ remaining work is a well-defined (hard) inference problem.
 - Method (general): mine multiple wins -> feature common to all winning frames, absent from non-wins
   -> check winning action -> goal_fn + confirm-action. Solves the single-win underdetermination
   that blocked Stage 1. This is Twin's goal-discovery, validated on our hardest case.
+
+## CAPSTONE: sp80 SOLVED END-TO-END by the full autonomous system
+- solve_live.py chains all validated pieces on a LIVE game:
+  1. HUD mask (from no-op) 2. explore + Qwen induces physics step() -> backtest 1.000
+  3. goal_writer mines 15 wins -> LLM writes goal_reached -> validated 15/15 win, 565/565 non-win
+  4. install goal, BFS-plan (3 moves) 5. execute live 6. submit ACTION5 -> LEVEL_COMPLETED.
+- Local Qwen3.6-27B, fully autonomous, no hand-coded goal. Solved in 3 moves + submit (high RHAE efficiency).
+- This is the complete executable-world-model + goal-discovery loop (Twin/EWM approach, Aug 2026 SOTA),
+  running locally. The thing that blocked Stage 1 is fully closed on sp80.
